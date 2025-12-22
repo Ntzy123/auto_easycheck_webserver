@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}{{ instance.name }} - 实例详情{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1>{{ instance.name }}</h1>
+</div>
+
+<div style="background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div>
+            <div style="font-size: 18px; font-weight: 600; color: #333;">{{ instance.name }}</div>
+            <div style="font-size: 14px; color: #666; margin-top: 5px;">创建时间: {{ instance.created_at }}</div>
+        </div>
+        <div class="status {{ 'running' if instance.running else 'stopped' }}" style="font-size: 14px;">
+            {{ '运行中' if instance.running else '已停止' }}
+        </div>
+    </div>
+    
+    <div style="margin-bottom: 15px;">
+        <div style="font-weight: 500; margin-bottom: 5px; color: #333;">URL:</div>
+        <div style="font-size: 14px; color: #666; word-break: break-all;">{{ instance.url }}</div>
+    </div>
+    
+    <div style="margin-bottom: 15px;">
+        <div style="font-weight: 500; margin-bottom: 5px; color: #333;">进程ID:</div>
+        <div style="font-size: 14px; color: #666;">{{ instance.pid }}</div>
+    </div>
+</div>
+
+<div style="background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1);">
+    <div style="font-weight: 600; margin-bottom: 15px; color: #333;">完整日志</div>
+    <div class="full-logs">
+        {% if instance.full_logs %}
+            {% for log in instance.full_logs %}
+                {{ log }}
+                {% if not loop.last %}
+                
+                {% endif %}
+            {% endfor %}
+        {% else %}
+            暂无日志信息
+        {% endif %}
+    </div>
+</div>
+
+<div class="action-buttons" style="justify-content: center;">
+    <a href="{{ url_for('index') }}" class="btn btn-secondary" style="margin-right: 10px;">返回</a>
+    {% if instance.running %}
+        <form method="POST" action="{{ url_for('stop_instance', instance_id=instance.id) }}" style="display: inline;">
+            <button type="submit" class="btn btn-danger" onclick="return confirmStop('{{ instance.name }}')">结束实例</button>
+        </form>
+    {% endif %}
+</div>
+{% endblock %}

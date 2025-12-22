@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="header">
+    <h1>实例管理</h1>
+</div>
+
+{% if instances %}
+    <div class="grid">
+        {% for instance_id, instance in instances.items() %}
+            <a href="{{ url_for('instance_detail', instance_id=instance_id) }}" style="text-decoration: none;">
+                <div class="instance-card">
+                    <div class="instance-name">{{ instance.name }}</div>
+                    <div class="status {{ 'running' if instance.running else 'stopped' }}">
+                        {{ '运行中' if instance.running else '已停止' }}
+                    </div>
+                    <div class="logs">
+                        {% for log in instance.logs[-3:] %}
+                            <div>{{ log }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </a>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="center-container">
+        <div class="empty-state">
+            <h3>暂无运行实例</h3>
+            <p>点击下方按钮创建第一个实例</p>
+        </div>
+    </div>
+{% endif %}
+
+<div class="center-container" style="min-height: auto; margin-top: 20px;">
+    <a href="{{ url_for('create_instance') }}" class="btn">创建新实例</a>
+</div>
+{% endblock %}
