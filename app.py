@@ -9,7 +9,7 @@ from datetime import datetime
 app = Flask(__name__)
 
 # 存储运行实例的数据
-instances_file = 'instances.json'
+instances_file = 'cache/instances.json'
 # 日志目录路径
 logs_dir = os.path.join(os.path.dirname(__file__), 'log')
 
@@ -19,41 +19,52 @@ if not os.path.exists(logs_dir):
 
 # 启动时重置instances.json，清理残留的实例数据
 def reset_instances_file():
-    if os.path.exists(instances_file):
-        try:
-            # 检查是否有实际运行的进程
-            with open(instances_file, 'r', encoding='utf-8') as f:
-                instances = json.load(f)
-            
-            # 过滤掉实际还在运行的进程
-            active_instances = {}
-            for instance_id, instance in instances.items():
-                if 'pid' in instance:
-                    try:
-                        process = psutil.Process(instance['pid'])
-                        if process.is_running():
-                            # 进程仍在运行，保留该实例
-                            active_instances[instance_id] = instance
-                    except:
-                        # 进程不存在，跳过
-                        pass
-            
-            # 如果所有进程都已停止，则清空文件
-            if not active_instances:
-                with open(instances_file, 'w', encoding='utf-8') as f:
-                    json.dump({}, f, ensure_ascii=False, indent=2)
-                print("已重置instances.json文件")
-            else:
-                # 保存仍在运行的实例
-                with open(instances_file, 'w', encoding='utf-8') as f:
-                    json.dump(active_instances, f, ensure_ascii=False, indent=2)
-                print(f"保留 {len(active_instances)} 个仍在运行的实例")
-                
-        except Exception as e:
-            print(f"重置instances.json时出错: {e}")
-            # 如果文件损坏或读取失败，直接重置为空
+    # 确保cache文件夹存在
+    cache_dir = os.path.dirname(instances_file)
+    if cache_dir and not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
+    
+    # 如果instances.json不存在，创建空文件
+    if not os.path.exists(instances_file):
+        with open(instances_file, 'w', encoding='utf-8') as f:
+            json.dump({}, f, ensure_ascii=False, indent=2)
+        return
+    
+    # 文件存在，进行清理操作
+    try:
+        # 检查是否有实际运行的进程
+        with open(instances_file, 'r', encoding='utf-8') as f:
+            instances = json.load(f)
+        
+        # 过滤掉实际还在运行的进程
+        active_instances = {}
+        for instance_id, instance in instances.items():
+            if 'pid' in instance:
+                try:
+                    process = psutil.Process(instance['pid'])
+                    if process.is_running():
+                        # 进程仍在运行，保留该实例
+                        active_instances[instance_id] = instance
+                except:
+                    # 进程不存在，跳过
+                    pass
+        
+        # 如果所有进程都已停止，则清空文件
+        if not active_instances:
             with open(instances_file, 'w', encoding='utf-8') as f:
                 json.dump({}, f, ensure_ascii=False, indent=2)
+            print("已重置instances.json文件")
+        else:
+            # 保存仍在运行的实例
+            with open(instances_file, 'w', encoding='utf-8') as f:
+                json.dump(active_instances, f, ensure_ascii=False, indent=2)
+            print(f"保留 {len(active_instances)} 个仍在运行的实例")
+            
+    except Exception as e:
+        print(f"重置instances.json时出错: {e}")
+        # 如果文件损坏或读取失败，直接重置为空
+        with open(instances_file, 'w', encoding='utf-8') as f:
+            json.dump({}, f, ensure_ascii=False, indent=2)
 
 # 应用启动时执行重置
 reset_instances_file()
