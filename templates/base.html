@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>{% block title %}实例管理{% endblock %}</title>
+    <title>{% block title %}轻松夜答管理平台{% endblock %}</title>
     <style>
         * {
             margin: 0;
@@ -26,13 +26,60 @@
         .header {
             text-align: center;
             color: white;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
         }
         
         .header h1 {
             font-size: 24px;
             font-weight: 300;
             text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+        }
+        
+        .top-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+        }
+        
+        .top-btn {
+            color: white;
+            background: none;
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+        
+        .top-btn:hover {
+            background: rgba(255,255,255,0.1);
+            border-color: rgba(255,255,255,0.5);
+        }
+        
+        .help-content {
+            background: rgba(255,255,255,0.95);
+            border-radius: 12px;
+            padding: 20px;
+            color: #333;
+            font-size: 14px;
+            line-height: 1.6;
+            display: none;
+            max-width: 320px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+        
+        .help-content.show {
+            display: block;
         }
         
         .grid {
@@ -192,6 +239,21 @@
 </head>
 <body>
     <div class="container">
+        <div class="header">
+            <h1>轻松夜答管理平台</h1>
+            <div class="top-buttons">
+                <a href="https://rm.vankeservice.com/api/easycheck/web/index?wkwebview=true&rurl=/nightAnswer" 
+                   target="_blank" class="top-btn">轻松夜答URL</a>
+                <button class="top-btn" onclick="toggleHelp()">帮助</button>
+            </div>
+        </div>
+        <div class="help-content" id="helpContent">
+            <h3 style="text-align: center; margin-bottom: 15px; color: #333;">使用指南</h3>
+            <p style="margin-bottom: 12px;"><strong>第一步：</strong>点击右上角↗的<strong style="color: #667eea;">[轻松夜答URL]</strong>按钮</p>
+            <p style="margin-bottom: 12px;"><strong>第二步：</strong>登录成功进入夜答网页后，复制浏览器地址栏中的完整网址URL</p>
+            <p style="margin-bottom: 12px;"><strong>第三步：</strong>返回到此界面，点击页面底部的<strong style="color: #667eea;">[创建新实例]</strong>按钮</p>
+            <p style="margin-bottom: 0;"><strong>第四步：</strong>输入实例名称（备注）和刚刚复制的URL，点击确定即可完成创建</p>
+        </div>
         {% block content %}{% endblock %}
     </div>
     
@@ -206,11 +268,17 @@
                         window.location.reload();
                     });
             }
-        }, 5000);
+        }, 60000);
         
         // 确认停止实例
         function confirmStop(instanceName) {
             return confirm(`确定要停止实例 "${instanceName}" 吗？`);
+        }
+        
+        // 切换帮助内容显示
+        function toggleHelp() {
+            const helpContent = document.getElementById('helpContent');
+            helpContent.classList.toggle('show');
         }
     </script>
 </body>

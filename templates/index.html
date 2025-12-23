@@ -1,10 +1,6 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="header">
-    <h1>实例管理</h1>
-</div>
-
 {% if instances %}
     <div class="grid">
         {% for instance_id, instance in instances.items() %}
