@@ -6,5 +6,6 @@ res/
 log/
 app/
 cache/
+static/
 *.spec
 *.log
