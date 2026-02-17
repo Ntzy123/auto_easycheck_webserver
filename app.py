@@ -12,10 +12,53 @@ app = Flask(__name__)
 instances_file = 'cache/instances.json'
 # 日志目录路径
 logs_dir = os.path.join(os.path.dirname(__file__), 'log')
+# 操作日志文件路径
+operation_log_file = os.path.join(logs_dir, 'main.log')
 
 # 确保日志目录存在
 if not os.path.exists(logs_dir):
     os.makedirs(logs_dir)
+
+# 记录操作日志
+def log_operation(action, detail=""):
+    """记录操作日志到main.log"""
+    try:
+        # 获取真实的客户端IP（支持反向代理）
+        if not request:
+            client_ip = 'unknown'
+        else:
+            # 优先检查X-Forwarded-For（标准代理头）
+            forwarded_for = request.headers.get('X-Forwarded-For')
+            if forwarded_for:
+                # X-Forwarded-For格式：客户端IP, 代理1IP, 代理2IP
+                # 取第一个IP（真实客户端IP）
+                client_ip = forwarded_for.split(',')[0].strip()
+            # 检查X-Real-IP（nginx常用）
+            elif request.headers.get('X-Real-IP'):
+                client_ip = request.headers.get('X-Real-IP')
+            # 检查CF-Connecting-IP（Cloudflare）
+            elif request.headers.get('CF-Connecting-IP'):
+                client_ip = request.headers.get('CF-Connecting-IP')
+            # 检查X-Forwarded
+            elif request.headers.get('X-Forwarded'):
+                client_ip = request.headers.get('X-Forwarded')
+            # 最后使用直接连接的IP
+            else:
+                client_ip = request.remote_addr
+        
+        # 生成日志内容
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        log_message = f"{timestamp}  [INFO]  [{client_ip}] {action}"
+        if detail:
+            log_message += f" - {detail}"
+        log_message += "\n"
+        
+        # 写入日志文件
+        with open(operation_log_file, 'a', encoding='utf-8') as f:
+            f.write(log_message)
+            
+    except Exception as e:
+        print(f"记录操作日志失败: {e}")
 
 # 启动时重置instances.json，清理残留的实例数据
 def reset_instances_file():
@@ -113,6 +156,9 @@ def index():
     
     save_instances(instances)
     
+    # 记录访问首页的日志
+    log_operation("访问首页", f"当前实例数量: {len(instances)}")
+    
     return render_template('index.html', instances=instances)
 
 @app.route('/create', methods=['GET', 'POST'])
@@ -149,6 +195,10 @@ def create_instance():
             }
             
             save_instances(instances)
+            
+            # 记录创建实例的日志
+            log_operation("创建实例", f"实例名: {name}, URL: {url}, PID: {process.pid}")
+            
             return redirect(url_for('index'))
             
         except Exception as e:
@@ -168,6 +218,9 @@ def instance_detail(instance_id):
     # 获取完整的真实日志
     instance['full_logs'] = get_instance_logs(instance['name'], 50)
     
+    # 记录查看实例详情的日志
+    log_operation("查看实例详情", f"实例名: {instance['name']}, URL: {instance['url']}")
+    
     return render_template('instance_detail.html', instance=instance)
 
 @app.route('/stop/<instance_id>', methods=['POST'])
@@ -177,16 +230,41 @@ def stop_instance(instance_id):
     
     if instance and 'pid' in instance:
         try:
-            process = psutil.Process(instance['pid'])
-            process.terminate()
-            process.wait(timeout=5)  # 等待进程结束
-        except:
-            pass
+            # 递归终止所有子进程
+            def terminate_process_tree(pid):
+                try:
+                    parent = psutil.Process(pid)
+                    # 获取所有子进程（包括孙进程等）
+                    children = parent.children(recursive=True)
+                    
+                    # 先终止所有子进程
+                    for child in children:
+                        try:
+                            child.terminate()
+                        except psutil.NoSuchProcess:
+                            pass
+                    
+                    # 等待子进程结束（最多3秒）
+                    if children:
+                        psutil.wait_procs(children, timeout=3)
+                    
+                    # 最后终止父进程
+                    parent.terminate()
+                    parent.wait(timeout=3)
+                except psutil.NoSuchProcess:
+                    pass
+            
+            terminate_process_tree(instance['pid'])
+        except Exception as e:
+            print(f"终止进程时出错: {e}")
         
         # 删除实例
         if instance_id in instances:
             del instances[instance_id]
             save_instances(instances)
+            
+            # 记录停止实例的日志
+            log_operation("停止实例", f"实例名: {instance['name']}, URL: {instance['url']}")
     
     return redirect(url_for('index'))
 
