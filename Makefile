@@ -15,7 +15,7 @@ else
     NULL        = /dev/null
 endif
 
-APP_NAME = auto-easycheck-webserver
+APP_NAME = auto_easycheck_webserver
 
 .PHONY: help setup mirror run test
 
@@ -34,6 +34,8 @@ help:
 setup: $(VENV_PYTHON)
 	$(VENV_PYTHON) -m pip install --upgrade pip > $(NULL) 2>&1
 	$(VENV_PIP) install -e .
+	$(VENV_PIP) install -e ../auto_easycheck
+	$(VENV_PIP) install -e ../easycheck_manager
 	@echo "Setup complete."
 
 mirror: $(VENV_PYTHON)

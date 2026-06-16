@@ -1,5 +1,5 @@
-"""Entry point for `python -m easycheck_webserver`."""
+"""Entry point for `python -m auto_easycheck_webserver`."""
 
-from easycheck_webserver import main
+from auto_easycheck_webserver import main
 
 main()

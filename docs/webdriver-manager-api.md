@@ -1,10 +1,19 @@
 # WebDriverManager API 参考
 
-> 模块路径：`easycheck_manager.lib.webdriver_manager`
+> 模块路径：`easycheck_manager`（推荐） / `easycheck_manager.lib.webdriver_manager`
 
 `WebDriverManager` 是项目的核心类，提供 EdgeDriver 的全生命周期管理：自动检测 Edge 版本 → 比对现有 Driver → 下载匹配版本 → 安装并配置环境。
 
 ---
+
+## 导入
+
+```python
+from easycheck_manager import WebDriverManager
+
+manager = WebDriverManager()
+manager.start()
+```
 
 ## 构造函数
 
