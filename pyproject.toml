@@ -12,9 +12,6 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "flask>=3.0",
-    "psutil>=5.9",
-    "requests>=2.31.0",
-    "pywin32>=306",
 ]
 
 [project.optional-dependencies]
@@ -25,7 +22,7 @@ test = [
 ]
 
 [project.scripts]
-auto-easycheck-webserver = "auto_easycheck_webserver:main"
+auto-easycheck-webserver = "auto_easycheck_webserver.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

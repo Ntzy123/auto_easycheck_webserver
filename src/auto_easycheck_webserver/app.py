@@ -1,9 +1,8 @@
 from flask import Flask, render_template, request, redirect, url_for
-import subprocess
-import psutil
 import os
 import json
 import time
+import threading
 from datetime import datetime
 
 app = Flask(__name__)
@@ -14,6 +13,9 @@ instances_file = "cache/instances.json"
 logs_dir = "log"
 # 操作日志文件路径
 operation_log_file = os.path.join(logs_dir, "main.log")
+
+# 内存中追踪运行中的线程（线程对象不可序列化）
+_runtime = {}  # {instance_id: {"thread": Thread, "stop_event": Event}}
 
 # 确保日志目录存在
 if not os.path.exists(logs_dir):
@@ -49,42 +51,13 @@ def log_operation(action, detail=""):
 
 
 def reset_instances_file():
-    """启动时重置instances.json，清理残留的实例数据"""
+    """启动时清空实例文件（线程状态无法跨进程恢复）"""
     cache_dir = os.path.dirname(instances_file)
     if cache_dir and not os.path.exists(cache_dir):
         os.makedirs(cache_dir)
 
-    if not os.path.exists(instances_file):
-        with open(instances_file, "w", encoding="utf-8") as f:
-            json.dump({}, f, ensure_ascii=False, indent=2)
-        return
-
-    try:
-        with open(instances_file, "r", encoding="utf-8") as f:
-            instances = json.load(f)
-
-        active_instances = {}
-        for instance_id, instance in instances.items():
-            if "pid" in instance:
-                try:
-                    process = psutil.Process(instance["pid"])
-                    if process.is_running():
-                        active_instances[instance_id] = instance
-                except Exception:
-                    pass
-
-        if not active_instances:
-            with open(instances_file, "w", encoding="utf-8") as f:
-                json.dump({}, f, ensure_ascii=False, indent=2)
-            print("已重置instances.json文件")
-        else:
-            with open(instances_file, "w", encoding="utf-8") as f:
-                json.dump(active_instances, f, ensure_ascii=False, indent=2)
-            print(f"保留 {len(active_instances)} 个仍在运行的实例")
-    except Exception as e:
-        print(f"重置instances.json时出错: {e}")
-        with open(instances_file, "w", encoding="utf-8") as f:
-            json.dump({}, f, ensure_ascii=False, indent=2)
+    with open(instances_file, "w", encoding="utf-8") as f:
+        json.dump({}, f, ensure_ascii=False, indent=2)
 
 
 reset_instances_file()
@@ -115,19 +88,38 @@ def get_instance_logs(name, lines=10):
     return ["暂无日志"]
 
 
+def _run_instance(url, log_name, stop_event):
+    """在子线程中运行 auto_easycheck，支持通过 stop_event 停止"""
+    from auto_easycheck import setup_logging, create_driver, auto_click
+
+    setup_logging(log_name)
+    driver = create_driver()
+    try:
+        while not stop_event.is_set():
+            auto_click(driver, url)
+            # 每秒检查一次 stop_event，最多等待 60 秒进入下一轮
+            for _ in range(60):
+                if stop_event.is_set():
+                    break
+                time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        driver.quit()
+
+
 @app.route("/")
 def index():
     instances = load_instances()
 
     for instance_id, instance in instances.items():
-        if "pid" in instance:
-            try:
-                process = psutil.Process(instance["pid"])
-                instance["running"] = process.is_running()
-                instance["logs"] = get_instance_logs(instance["name"], 3)
-            except Exception:
-                instance["running"] = False
-                instance["logs"] = ["进程已停止"]
+        rt = _runtime.get(instance_id)
+        if rt and rt["thread"].is_alive():
+            instance["running"] = True
+            instance["logs"] = get_instance_logs(instance["name"], 3)
+        else:
+            instance["running"] = False
+            instance["logs"] = ["已停止"]
 
     save_instances(instances)
     log_operation("访问首页", f"当前实例数量: {len(instances)}")
@@ -147,24 +139,26 @@ def create_instance():
         instance_id = str(int(time.time()))
 
         try:
-            exe_path = os.path.join("app", "auto_easycheck.exe")
-            if not os.path.exists(exe_path):
-                return render_template("create.html", error="auto_easycheck.exe文件不存在")
-
-            process = subprocess.Popen([exe_path, "--name", name, "--url", url])
+            stop_event = threading.Event()
+            thread = threading.Thread(
+                target=_run_instance,
+                args=(url, name, stop_event),
+                daemon=True,
+            )
+            thread.start()
 
             instances[instance_id] = {
                 "id": instance_id,
                 "name": name,
                 "url": url,
-                "pid": process.pid,
                 "running": True,
                 "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "logs": [f"进程启动成功 - PID: {process.pid}", f"开始监控: {url}"],
+                "logs": [f"实例启动成功", f"开始监控: {url}"],
             }
+            _runtime[instance_id] = {"thread": thread, "stop_event": stop_event}
 
             save_instances(instances)
-            log_operation("创建实例", f"实例名: {name}, URL: {url}, PID: {process.pid}")
+            log_operation("创建实例", f"实例名: {name}, URL: {url}")
             return redirect(url_for("index"))
         except Exception as e:
             print(f"启动失败: {e}")
@@ -191,27 +185,11 @@ def stop_instance(instance_id):
     instances = load_instances()
     instance = instances.get(instance_id)
 
-    if instance and "pid" in instance:
-        try:
-            def terminate_process_tree(pid):
-                try:
-                    parent = psutil.Process(pid)
-                    children = parent.children(recursive=True)
-                    for child in children:
-                        try:
-                            child.terminate()
-                        except psutil.NoSuchProcess:
-                            pass
-                    if children:
-                        psutil.wait_procs(children, timeout=3)
-                    parent.terminate()
-                    parent.wait(timeout=3)
-                except psutil.NoSuchProcess:
-                    pass
-
-            terminate_process_tree(instance["pid"])
-        except Exception as e:
-            print(f"终止进程时出错: {e}")
+    if instance:
+        rt = _runtime.get(instance_id)
+        if rt:
+            rt["stop_event"].set()
+            _runtime.pop(instance_id, None)
 
         if instance_id in instances:
             del instances[instance_id]
@@ -226,12 +204,11 @@ def api_status():
     instances = load_instances()
 
     for instance_id, instance in instances.items():
-        if "pid" in instance:
-            try:
-                process = psutil.Process(instance["pid"])
-                instance["running"] = process.is_running()
-            except Exception:
-                instance["running"] = False
+        rt = _runtime.get(instance_id)
+        if rt and rt["thread"].is_alive():
+            instance["running"] = True
+        else:
+            instance["running"] = False
 
     save_instances(instances)
     return {"status": "ok", "instances": instances}
