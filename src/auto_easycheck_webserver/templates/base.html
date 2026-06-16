@@ -11,39 +11,39 @@
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
         }
-        
+
         .container {
             max-width: 100%;
             margin: 0 auto;
         }
-        
+
         .header {
             text-align: center;
             color: white;
             margin-bottom: 20px;
         }
-        
+
         .header h1 {
             font-size: 24px;
             font-weight: 300;
             text-shadow: 0 2px 4px rgba(0,0,0,0.1);
             margin-bottom: 15px;
         }
-        
+
         .top-buttons {
             display: flex;
             gap: 10px;
             justify-content: flex-end;
             flex-wrap: wrap;
         }
-        
+
         .top-btn {
             color: white;
             background: none;
@@ -55,12 +55,12 @@
             text-decoration: none;
             transition: all 0.3s ease;
         }
-        
+
         .top-btn:hover {
             background: rgba(255,255,255,0.1);
             border-color: rgba(255,255,255,0.5);
         }
-        
+
         .help-content {
             background: rgba(255,255,255,0.95);
             border-radius: 12px;
@@ -78,18 +78,18 @@
             z-index: 1000;
             border: 1px solid rgba(0,0,0,0.1);
         }
-        
+
         .help-content.show {
             display: block;
         }
-        
+
         .grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 15px;
             margin-bottom: 20px;
         }
-        
+
         .instance-card {
             background: white;
             border-radius: 16px;
@@ -98,14 +98,14 @@
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255,255,255,0.2);
         }
-        
+
         .instance-name {
             font-size: 16px;
             font-weight: 600;
             margin-bottom: 10px;
             color: #333;
         }
-        
+
         .status {
             display: inline-block;
             padding: 4px 12px;
@@ -114,17 +114,17 @@
             font-weight: 500;
             margin-bottom: 10px;
         }
-        
+
         .status.running {
             background: #e8f5e8;
             color: #2e7d32;
         }
-        
+
         .status.stopped {
             background: #ffebee;
             color: #c62828;
         }
-        
+
         .logs {
             background: #f8f9fa;
             border-radius: 8px;
@@ -136,7 +136,7 @@
             color: #666;
             line-height: 1.4;
         }
-        
+
         .btn {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -152,40 +152,40 @@
             transition: all 0.3s ease;
             box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
         }
-        
+
         .btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
         }
-        
+
         .btn-danger {
             background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
             box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
         }
-        
+
         .btn-secondary {
             background: #6c757d;
             box-shadow: 0 4px 15px rgba(108, 117, 125, 0.3);
         }
-        
+
         .center-container {
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 60vh;
         }
-        
+
         .form-group {
             margin-bottom: 20px;
         }
-        
+
         .form-label {
             display: block;
             margin-bottom: 8px;
             font-weight: 500;
             color: #333;
         }
-        
+
         .form-input {
             width: 100%;
             padding: 12px 16px;
@@ -194,18 +194,18 @@
             font-size: 16px;
             transition: border-color 0.3s ease;
         }
-        
+
         .form-input:focus {
             outline: none;
             border-color: #667eea;
         }
-        
+
         .error {
             color: #dc3545;
             font-size: 14px;
             margin-top: 5px;
         }
-        
+
         .full-logs {
             background: #1e1e1e;
             color: #d4d4d4;
@@ -218,19 +218,19 @@
             line-height: 1.4;
             white-space: pre-wrap;
         }
-        
+
         .action-buttons {
             display: flex;
             gap: 10px;
             margin-top: 20px;
         }
-        
+
         .empty-state {
             text-align: center;
             color: rgba(255,255,255,0.8);
             padding: 40px 20px;
         }
-        
+
         .empty-state h3 {
             font-size: 18px;
             margin-bottom: 10px;
@@ -243,7 +243,7 @@
         <div class="header">
             <h1>轻松夜答管理平台</h1>
             <div class="top-buttons">
-                <a href="https://rm.vankeservice.com/api/easycheck/web/index?wkwebview=true&rurl=/nightAnswer" 
+                <a href="https://rm.vankeservice.com/api/easycheck/web/index?wkwebview=true&rurl=/nightAnswer"
                    target="_blank" class="top-btn">轻松夜答URL</a>
                 <button class="top-btn" onclick="toggleHelp()">帮助</button>
             </div>
@@ -257,26 +257,22 @@
         </div>
         {% block content %}{% endblock %}
     </div>
-    
+
     <script>
-        // 自动刷新实例状态
         setInterval(() => {
             if (window.location.pathname === '/') {
                 fetch('/api/status')
                     .then(response => response.json())
                     .then(data => {
-                        // 这里可以更新页面状态，简化处理直接刷新页面
                         window.location.reload();
                     });
             }
         }, 60000);
-        
-        // 确认停止实例
+
         function confirmStop(instanceName) {
             return confirm(`确定要停止实例 "${instanceName}" 吗？`);
         }
-        
-        // 切换帮助内容显示
+
         function toggleHelp() {
             const helpContent = document.getElementById('helpContent');
             helpContent.classList.toggle('show');

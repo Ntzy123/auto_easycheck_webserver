@@ -1,6 +1,0 @@
-pyinstaller
-flask
-psutil
-requests
-pywin32
-selenium

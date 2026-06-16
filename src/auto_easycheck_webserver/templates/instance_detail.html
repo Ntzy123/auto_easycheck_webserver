@@ -17,12 +17,12 @@
             {{ '运行中' if instance.running else '已停止' }}
         </div>
     </div>
-    
+
     <div style="margin-bottom: 15px;">
         <div style="font-weight: 500; margin-bottom: 5px; color: #333;">URL:</div>
         <div style="font-size: 14px; color: #666; word-break: break-all;">{{ instance.url }}</div>
     </div>
-    
+
     <div style="margin-bottom: 15px;">
         <div style="font-weight: 500; margin-bottom: 5px; color: #333;">进程ID:</div>
         <div style="font-size: 14px; color: #666;">{{ instance.pid }}</div>
@@ -36,7 +36,7 @@
             {% for log in instance.full_logs %}
                 {{ log }}
                 {% if not loop.last %}
-                
+
                 {% endif %}
             {% endfor %}
         {% else %}

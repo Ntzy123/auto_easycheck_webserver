@@ -1,11 +1,33 @@
+# Virtual environment
+.venv/
 venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build artifacts
 dist/
 build/
-__pycache__/
-res/
-log/
-app/
-cache/
-static/
+*.egg-info/
 *.spec
+
+# IDE
+.vscode/
+.idea/
+
+# Project-specific runtime
+log/
+res/
+cache/
+app/
+static/
 *.log
+
+# Test & coverage
+.coverage
+.coverage.*
+htmlcov/
+.cache/
