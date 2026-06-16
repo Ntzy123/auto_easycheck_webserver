@@ -15,16 +15,18 @@ def main() -> None:
     for name, url in REPOS:
         target = os.path.join("..", name)
         if os.path.isdir(target):
-            print(f"{name} 已存在")
+            print(f"  ✅ {name} 已存在，跳过克隆")
             continue
-        print(f"Cloning {name}...")
+        print(f"  ⏳ 正在克隆 {name} ...")
         result = subprocess.run(
             ["git", "clone", url, target],
+            capture_output=True, text=True,
             env=GIT_ENV,
         )
         if result.returncode != 0:
-            print(f"ERROR: {name} 克隆失败，请检查网络连接", file=sys.stderr)
+            print(f"  ❌ 克隆 {name} 失败: {result.stderr.strip()}", file=sys.stderr)
             sys.exit(1)
+        print(f"  ✅ {name} 克隆完成")
 
 
 if __name__ == "__main__":

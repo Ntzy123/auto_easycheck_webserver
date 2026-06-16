@@ -25,7 +25,7 @@ def test_main_dependencies_import():
 
     assert callable(serve)
     assert hasattr(flask, "Flask")
-    assert hasattr(auto_easycheck, "setup_logging")
+    assert hasattr(auto_easycheck, "run")
     assert issubclass(WebDriverManager, object)
 
 

@@ -23,6 +23,15 @@ from auto_easycheck import run
 run(url="https://rm.vankeservice.com/api/easycheck/web/index?wkwebview=true&rurl=/nightAnswer")
 ```
 
+日志自动写入 `./log/auto_easycheck.log`，同时输出到控制台：
+
+```
+2026-06-17  07:21:05  [INFO]  打开夜答网页
+2026-06-17  07:21:10  [INFO]  打开夜答题目
+2026-06-17  07:21:12  [INFO]  选择第一个选项
+2026-06-17  07:21:13  [INFO]  提交答案
+```
+
 ---
 
 ## 公共 API
@@ -31,23 +40,24 @@ run(url="https://rm.vankeservice.com/api/easycheck/web/index?wkwebview=true&rurl
 
 | 函数 | 说明 |
 |------|------|
-| `run()` | **一键启动**（推荐），自动完成日志、浏览器、答题循环全流程 |
+| `run()` | **一键启动**（推荐），自动完成浏览器、答题循环全流程 |
 | `auto_click()` | 单次答题核心逻辑，需自行管理 driver |
 | `create_driver()` | 创建预配置的 headless Edge 浏览器实例 |
-| `setup_logging()` | 配置日志系统 |
+
+日志按 `log_name` 隔离，每个名称对应独立的日志文件 `./log/<log_name>.log`，多线程场景下互不干扰。
 
 ---
 
 ### `run(url, log_name="auto_easycheck")`
 
-一键启动答题循环，内部自动完成：配置日志 → 创建浏览器 → 循环答题（每 60 秒一次）→ 异常/中断自动清理。
+一键启动答题循环，内部自动完成：创建浏览器 → 循环答题（每 60 秒一次）→ 异常/中断自动清理。
 
 **参数：**
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `url` | `str` | — | 轻松夜答网页完整 URL |
-| `log_name` | `str` | `"auto_easycheck"` | 日志文件名称（不含路径），自动写入 `./log/<log_name>.log` |
+| `log_name` | `str` | `"auto_easycheck"` | 日志名称，对应日志文件 `./log/<log_name>.log` |
 
 **返回值：** 无。函数以无限循环方式运行，直到用户中断（Ctrl+C）或发生未捕获异常。
 
@@ -56,31 +66,27 @@ run(url="https://rm.vankeservice.com/api/easycheck/web/index?wkwebview=true&rurl
 ```python
 from auto_easycheck import run
 
-# 基本用法
+# 默认日志名
 run(url="https://example.com/nightAnswer")
 
 # 自定义日志名
-run(url="https://example.com/nightAnswer", log_name="my_project")
-
-# 在子线程中运行（需自行处理信号）
-import threading
-
-t = threading.Thread(target=run, args=("https://example.com/nightAnswer",), daemon=True)
-t.start()
+run(url="https://example.com/nightAnswer", log_name="room_1")
 ```
 
 ---
 
-### `auto_click(driver, url)`
+### `auto_click(driver, url, log_name="auto_easycheck")`
 
 执行单次答题操作：打开网页 → 等待题目加载 → 选择第一个选项 → 提交答案。
+日志自动写入 `./log/<log_name>.log` 并输出到控制台。
 
 **参数：**
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `driver` | `selenium.webdriver.Edge` | 已初始化的 Edge WebDriver 实例 |
-| `url` | `str` | 轻松夜答网页完整 URL |
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `driver` | `selenium.webdriver.Edge` | — | 已初始化的 Edge WebDriver 实例 |
+| `url` | `str` | — | 轻松夜答网页完整 URL |
+| `log_name` | `str` | `"auto_easycheck"` | 日志名称，对应日志文件 `./log/<log_name>.log` |
 
 **返回值：** 无。
 
@@ -90,11 +96,11 @@ t.start()
 
 ```python
 from auto_easycheck import auto_click, create_driver
-from selenium.webdriver import Edge
 
 driver = create_driver()
 try:
     auto_click(driver, "https://example.com/nightAnswer")
+    auto_click(driver, "https://example.com/nightAnswer", log_name="room_1")
 finally:
     driver.quit()
 ```
@@ -126,51 +132,20 @@ driver.quit()
 
 ---
 
-### `setup_logging(name="auto_easycheck") -> str`
-
-配置日志系统，同时输出到文件和控制台。日志格式：
-
-```
-2025-06-16  12:00:00  [INFO]  打开夜答网页
-2025-06-16  12:00:05  [INFO]  提交答案
-```
-
-**参数：**
-
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `name` | `str` | `"auto_easycheck"` | 日志文件名称（不含后缀），文件位于 `./log/<name>.log` |
-
-**返回值：** `str` — 日志文件的完整路径。
-
-**示例：**
-
-```python
-from auto_easycheck import setup_logging
-
-log_path = setup_logging("my_task")
-print(f"日志路径: {log_path}")  # ./log/my_task.log
-```
-
----
-
 ## 进阶用法
 
 ### 自定义浏览器配置
 
 ```python
-from auto_easycheck import auto_click, setup_logging
+from auto_easycheck import auto_click
 from selenium import webdriver
 from selenium.webdriver.edge.options import Options
 
-# 自定义浏览器选项
 options = Options()
 options.add_argument("--headless")
 options.add_argument("--window-size=1920,1080")
-# 不启用 --no-sandbox，保留更高安全性
 driver = webdriver.Edge(options=options)
 
-setup_logging("custom_driver")
 try:
     auto_click(driver, "https://example.com/nightAnswer")
 finally:
@@ -185,37 +160,35 @@ import time
 
 driver = create_driver()
 try:
-    for _ in range(5):  # 只答 5 次
+    for _ in range(5):
         auto_click(driver, "https://example.com/nightAnswer")
         time.sleep(60)
 finally:
     driver.quit()
 ```
 
-### 多任务场景
+### 多任务场景（各自独立日志）
 
 ```python
 from auto_easycheck import run
 import threading
 
-urls = [
-    "https://example.com/room/1",
-    "https://example.com/room/2",
-]
+rooms = {
+    "room_1": "https://example.com/room/1",
+    "room_2": "https://example.com/room/2",
+}
 
 threads = []
-for i, url in enumerate(urls):
-    t = threading.Thread(
-        target=run,
-        args=(url, f"room_{i}"),
-        daemon=True,
-    )
+for name, url in rooms.items():
+    t = threading.Thread(target=run, args=(url, name), daemon=True)
     t.start()
     threads.append(t)
 
 for t in threads:
     t.join()
 ```
+
+每个线程的日志独立写入 `./log/room_1.log`、`./log/room_2.log`，互不干扰。
 
 ---
 
@@ -227,18 +200,12 @@ for t in threads:
 # 交互式输入 URL
 auto-easycheck
 
-# 直接指定 URL
-auto-easycheck -u "https://..."
-
-# 指定日志名称
-auto-easycheck -n "my_log"
-
-# 组合使用
+# 直接指定 URL 和日志名
 auto-easycheck -u "https://..." -n "my_log"
 ```
 
 或通过 Python 模块方式运行：
 
 ```bash
-python -m auto_easycheck -u "https://..."
+python -m auto_easycheck -u "https://..." -n "my_log"
 ```
