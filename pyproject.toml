@@ -12,6 +12,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "flask>=3.0",
+    "waitress>=3.0",
 ]
 
 [project.optional-dependencies]

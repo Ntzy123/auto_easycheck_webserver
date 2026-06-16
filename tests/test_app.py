@@ -14,6 +14,21 @@ def test_app_import():
     assert app.debug is False
 
 
+def test_main_dependencies_import():
+    """确认所有主要外部依赖包均可正常导入"""
+    import flask
+    import waitress
+    from waitress import serve
+    import auto_easycheck
+    import easycheck_manager
+    from easycheck_manager import WebDriverManager
+
+    assert callable(serve)
+    assert hasattr(flask, "Flask")
+    assert hasattr(auto_easycheck, "setup_logging")
+    assert issubclass(WebDriverManager, object)
+
+
 # ---- Instance Persistence ----
 
 @pytest.fixture(autouse=True)

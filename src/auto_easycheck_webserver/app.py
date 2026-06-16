@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for
+from waitress import serve
 import os
 import json
 import time
@@ -267,4 +268,4 @@ def api_status():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    serve(app, host="0.0.0.0", port=5000, threads=2)
