@@ -1,6 +1,6 @@
 """轻松夜答管理平台 - EasyCheck Web Server."""
 
-from easycheck_manager.lib.webdriver_manager import WebDriverManager
+from easycheck_manager import WebDriverManager
 from auto_easycheck_webserver.app import app
 
 
