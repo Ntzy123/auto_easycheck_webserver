@@ -3,7 +3,10 @@ import os
 import json
 import time
 import threading
+import signal
 from datetime import datetime
+import atexit
+import threading as _th
 
 app = Flask(__name__)
 
@@ -16,6 +19,7 @@ operation_log_file = os.path.join(logs_dir, "main.log")
 
 # 内存中追踪运行中的线程（线程对象不可序列化）
 _runtime = {}  # {instance_id: {"thread": Thread, "stop_event": Event}}
+_runtime_lock = _th.Lock()
 
 # 确保日志目录存在
 if not os.path.exists(logs_dir):
@@ -108,12 +112,58 @@ def _run_instance(url, log_name, stop_event):
         driver.quit()
 
 
+def _shutdown():
+    """优雅关闭：通知所有实例停止，等待线程退出，清理浏览器进程"""
+    if _shutdown.done:
+        return
+    _shutdown.done = True
+    print("正在关闭所有实例...")
+    items = list(_runtime.items())
+    if not items:
+        print("没有运行中的实例。")
+        return
+    for _, rt in items:
+        rt["stop_event"].set()
+    # 等待线程结束（最多等 10 秒，避免 hang 死）
+    for _, rt in items:
+        rt["thread"].join(timeout=10)
+        if rt["thread"].is_alive():
+            # 仍活着 → 强制 kill 浏览器及 driver 进程（pkill 默认只杀同用户进程）
+            try:
+                import subprocess
+                subprocess.run(["pkill", "-f", "msedgedriver"], capture_output=True)
+                subprocess.run(["pkill", "-f", "chromedriver"], capture_output=True)
+                subprocess.run(["pkill", "-f", "chrome"], capture_output=True)
+                subprocess.run(["pkill", "-f", "msedge"], capture_output=True)
+            except FileNotFoundError:
+                print("警告: pkill 未安装，跳过强制清理浏览器进程")
+    _runtime.clear()
+    print("所有实例已关闭。")
+
+
+_shutdown.done = False
+
+
+def _handle_sigterm(sig, frame):
+    """SIGTERM 处理器：即使 _shutdown 抛异常也确保进程退出"""
+    try:
+        _shutdown()
+    finally:
+        os._exit(0)
+
+
+atexit.register(_shutdown)
+signal.signal(signal.SIGTERM, _handle_sigterm)
+signal.signal(signal.SIGINT, _handle_sigterm)
+
+
 @app.route("/")
 def index():
     instances = load_instances()
 
     for instance_id, instance in instances.items():
-        rt = _runtime.get(instance_id)
+        with _runtime_lock:
+            rt = _runtime.get(instance_id)
         if rt and rt["thread"].is_alive():
             instance["running"] = True
             instance["logs"] = get_instance_logs(instance["name"], 3)
@@ -155,7 +205,8 @@ def create_instance():
                 "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "logs": [f"实例启动成功", f"开始监控: {url}"],
             }
-            _runtime[instance_id] = {"thread": thread, "stop_event": stop_event}
+            with _runtime_lock:
+                _runtime[instance_id] = {"thread": thread, "stop_event": stop_event}
 
             save_instances(instances)
             log_operation("创建实例", f"实例名: {name}, URL: {url}")
@@ -186,10 +237,10 @@ def stop_instance(instance_id):
     instance = instances.get(instance_id)
 
     if instance:
-        rt = _runtime.get(instance_id)
+        with _runtime_lock:
+            rt = _runtime.pop(instance_id, None)
         if rt:
             rt["stop_event"].set()
-            _runtime.pop(instance_id, None)
 
         if instance_id in instances:
             del instances[instance_id]
@@ -204,7 +255,8 @@ def api_status():
     instances = load_instances()
 
     for instance_id, instance in instances.items():
-        rt = _runtime.get(instance_id)
+        with _runtime_lock:
+            rt = _runtime.get(instance_id)
         if rt and rt["thread"].is_alive():
             instance["running"] = True
         else:

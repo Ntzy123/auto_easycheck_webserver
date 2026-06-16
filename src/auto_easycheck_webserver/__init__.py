@@ -7,4 +7,8 @@ from auto_easycheck_webserver.app import app
 def main():
     wdmanager = WebDriverManager()
     wdmanager.start()
-    app.run(host="0.0.0.0", port=3624)
+    try:
+        app.run(host="0.0.0.0", port=3624)
+    finally:
+        from auto_easycheck_webserver.app import _shutdown
+        _shutdown()
