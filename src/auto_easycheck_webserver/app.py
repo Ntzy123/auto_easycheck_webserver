@@ -18,7 +18,7 @@ logs_dir = "log"
 operation_log_file = os.path.join(logs_dir, "main.log")
 
 # 内存中追踪运行中的线程（线程对象不可序列化）
-_runtime = {}  # {instance_id: {"thread": Thread, "stop_event": Event, "restart_count": int, "name": str, "url": str}}
+_runtime = {}  # {instance_id: {"thread": Thread, "stop_event": Event, "restart_count": int, "name": str, "url": str, "driver_pid": int | None}}
 _runtime_lock = threading.Lock()
 _stop_monitor = threading.Event()  # 通知监控线程退出
 
@@ -96,11 +96,54 @@ def get_instance_logs(name, lines=10):
     return ["暂无日志"]
 
 
-def _run_instance(url, log_name, stop_event):
+def _kill_browser_processes(instance_id=None):
+    """跨平台强制清理浏览器和 driver 进程。
+
+    Args:
+        instance_id: 如果提供，优先精准杀该实例对应的 driver 进程树；
+                     否则只杀 msedgedriver.exe（不碰用户自开的 msedge）。
+    """
+    import subprocess
+    import platform
+
+    driver_pid = None
+    if instance_id:
+        with _runtime_lock:
+            rt = _runtime.get(instance_id)
+            if rt:
+                driver_pid = rt.get("driver_pid")
+
+    if platform.system() == "Windows":
+        if driver_pid:
+            # 精准杀：只杀本项目启动的 driver 及其子进程（msedge）
+            subprocess.run(["taskkill", "/F", "/PID", str(driver_pid), "/T"], capture_output=True)
+        else:
+            # 兜底：没有 PID 时只杀 msedgedriver，不碰用户自开的 msedge
+            subprocess.run(["taskkill", "/F", "/IM", "msedgedriver.exe"], capture_output=True)
+    else:
+        if driver_pid:
+            subprocess.run(["kill", "-9", str(driver_pid)], capture_output=True)
+        else:
+            try:
+                subprocess.run(["pkill", "-f", "msedgedriver"], capture_output=True)
+            except FileNotFoundError:
+                pass
+
+
+def _run_instance(url, log_name, stop_event, instance_id):
     """在子线程中运行 auto_easycheck，支持通过 stop_event 停止"""
     from auto_easycheck import create_driver, auto_click
 
     driver = create_driver()
+    # 记录 driver 进程 PID，用于精准清理
+    try:
+        driver_pid = driver.service.process.pid if driver.service else None
+    except Exception:
+        driver_pid = None
+    with _runtime_lock:
+        if instance_id in _runtime:
+            _runtime[instance_id]["driver_pid"] = driver_pid
+
     try:
         while not stop_event.is_set():
             auto_click(driver, url, log_name=log_name)
@@ -139,7 +182,7 @@ def _monitor_instances():
                 new_stop_event = threading.Event()
                 new_thread = threading.Thread(
                     target=_run_instance,
-                    args=(rt["url"], rt["name"], new_stop_event),
+                    args=(rt["url"], rt["name"], new_stop_event, instance_id),
                     daemon=True,
                 )
                 new_thread.start()
@@ -170,21 +213,14 @@ def _shutdown():
     if not items:
         print("没有运行中的实例。")
         return
-    for _, rt in items:
+    for instance_id, rt in items:
         rt["stop_event"].set()
-    # 等待线程结束（最多等 10 秒，避免 hang 死）
-    for _, rt in items:
-        rt["thread"].join(timeout=10)
+    # 等待线程结束（最多等 35 秒，覆盖 auto_click 内部等待）
+    for instance_id, rt in items:
+        rt["thread"].join(timeout=35)
         if rt["thread"].is_alive():
-            # 仍活着 → 强制 kill 浏览器及 driver 进程（pkill 默认只杀同用户进程）
-            try:
-                import subprocess
-                subprocess.run(["pkill", "-f", "msedgedriver"], capture_output=True)
-                subprocess.run(["pkill", "-f", "chromedriver"], capture_output=True)
-                subprocess.run(["pkill", "-f", "chrome"], capture_output=True)
-                subprocess.run(["pkill", "-f", "msedge"], capture_output=True)
-            except FileNotFoundError:
-                print("警告: pkill 未安装，跳过强制清理浏览器进程")
+            # 仍活着 → 强制 kill 浏览器及 driver 进程
+            _kill_browser_processes(instance_id)
     _runtime.clear()
     print("所有实例已关闭。")
 
@@ -244,7 +280,7 @@ def create_instance():
             stop_event = threading.Event()
             thread = threading.Thread(
                 target=_run_instance,
-                args=(url, name, stop_event),
+                args=(url, name, stop_event, instance_id),
                 daemon=True,
             )
             thread.start()
@@ -264,6 +300,7 @@ def create_instance():
                     "restart_count": 0,
                     "name": name,
                     "url": url,
+                    "driver_pid": None,
                 }
 
             save_instances(instances)
@@ -299,6 +336,11 @@ def stop_instance(instance_id):
             rt = _runtime.pop(instance_id, None)
         if rt:
             rt["stop_event"].set()
+            # 等待线程自然退出（最多等 70 秒，覆盖 auto_click 中 60s wait）
+            rt["thread"].join(timeout=70)
+            if rt["thread"].is_alive():
+                # 线程卡死 → 强制杀浏览器进程
+                _kill_browser_processes(instance_id)
 
         if instance_id in instances:
             del instances[instance_id]
