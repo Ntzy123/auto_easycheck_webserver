@@ -6,6 +6,7 @@ import sys
 REPOS = [
     ("auto_easycheck", "https://github.com/Ntzy123/auto_easycheck.git"),
     ("easycheck_manager", "https://github.com/Ntzy123/easycheck_manager.git"),
+    ("get-easycheck-url", "https://github.com/Ntzy123/get-easycheck-url.git"),
 ]
 
 GIT_ENV = {**os.environ, "GIT_HTTP_LOW_SPEED_TIME": "30", "GIT_HTTP_LOW_SPEED_LIMIT": "1"}

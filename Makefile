@@ -37,6 +37,7 @@ setup: $(VENV_PYTHON)
 	@$(PYTHON) setup_deps.py
 	$(VENV_PIP) install -e ../auto_easycheck
 	$(VENV_PIP) install -e ../easycheck_manager
+	$(VENV_PIP) install -e ../get-easycheck-url
 	@echo "Setup complete."
 
 mirror: $(VENV_PYTHON)

@@ -164,6 +164,57 @@ curl -X POST http://localhost:5000/api/status \
 
 ---
 
+### 获取 easycheck 授权 URL
+
+`POST /api/get-easycheck-url`
+
+通过手机号和密码自动完成 OAuth 登录，返回 easycheck 的可访问 URL（含 JWT Token）。
+
+**请求头：** `Content-Type: application/json`
+
+**请求体：**
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `mobile` | string | 是 | 手机号 |
+| `password` | string | 是 | 密码 |
+
+**示例：**
+
+```bash
+curl -X POST http://localhost:5000/api/get-easycheck-url \
+  -H "Content-Type: application/json" \
+  -d '{"mobile": "138xxxxxxxx", "password": "your_password"}'
+```
+
+**成功响应 (200):**
+
+```json
+{
+  "code": 0,
+  "success": true,
+  "msg": "请求成功",
+  "easycheck_url": "https://rm.vankeservice.com/easycheck/#/nightAnswer?accessToken=eyJ0eXAiOiJKV1Qi..."
+}
+```
+
+**失败响应：**
+
+| HTTP 状态码 | 场景 |
+|---|---|
+| 400 | 缺少 `mobile` 或 `password` |
+| 500 | 登录失败或网络异常 |
+
+```json
+{
+  "code": 2,
+  "success": false,
+  "msg": "获取失败: 登录失败，请检查手机号和密码"
+}
+```
+
+---
+
 ## 注意事项
 
 - 服务重启后之前创建的实例**不会**自动恢复（线程状态无法跨进程保存），需重新调用 `/api/create` 创建

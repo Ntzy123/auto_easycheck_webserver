@@ -358,6 +358,44 @@ def api_create_instance():
         return jsonify({"code": 2, "success": False, "msg": f"启动失败: {result}"}), 500
 
 
+@app.route("/api/get-easycheck-url", methods=["POST"])
+def api_get_easycheck_url():
+    """API: 通过手机号和密码获取 easycheck 授权 URL。
+
+    Request body (JSON):
+        {
+            "mobile": "138xxxxxxxx",
+            "password": "your_password"
+        }
+    """
+    if not request.is_json:
+        return jsonify({"code": 1, "success": False, "msg": "请求体必须是 JSON"}), 400
+
+    data = request.get_json()
+    mobile = (data.get("mobile") or "").strip()
+    password = (data.get("password") or "").strip()
+
+    if not mobile:
+        return jsonify({"code": 1, "success": False, "msg": "mobile 不能为空"}), 400
+    if not password:
+        return jsonify({"code": 1, "success": False, "msg": "password 不能为空"}), 400
+
+    try:
+        from get_easycheck_url import get_easycheck_url
+        url = get_easycheck_url(mobile, password)
+    except Exception as e:
+        log_operation("获取 easycheck URL 失败", f"手机号: {mobile}, 错误: {e}")
+        return jsonify({"code": 2, "success": False, "msg": f"获取失败: {e}"}), 500
+
+    log_operation("获取 easycheck URL", f"手机号: {mobile}")
+    return jsonify({
+        "code": 0,
+        "success": True,
+        "msg": "请求成功",
+        "easycheck_url": url,
+    })
+
+
 @app.route("/instance/<instance_id>")
 def instance_detail(instance_id):
     instances = load_instances()
