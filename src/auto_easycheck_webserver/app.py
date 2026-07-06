@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, jsonify, render_template, request, redirect, url_for
 from waitress import serve
 import os
 import json
@@ -131,7 +131,7 @@ def _kill_browser_processes(instance_id=None):
 
 
 def _run_instance(url, log_name, stop_event, instance_id):
-    """在子线程中运行 auto_easycheck，支持通过 stop_event 停止"""
+    """在子线程中运行自动夜答，支持通过 stop_event 停止"""
     from auto_easycheck import create_driver, auto_click
 
     driver = create_driver()
@@ -264,6 +264,53 @@ def index():
     return render_template("index.html", instances=instances)
 
 
+def _start_instance(name, url):
+    """启动一个自动夜答实例并注册到 _runtime 和持久化文件。
+
+    Returns:
+        (instance_id, instance_dict) 成功
+        (None, error_message) 失败
+    """
+    instances = load_instances()
+    instance_id = str(int(time.time()))
+
+    try:
+        stop_event = threading.Event()
+        thread = threading.Thread(
+            target=_run_instance,
+            args=(url, name, stop_event, instance_id),
+            daemon=True,
+        )
+        thread.start()
+
+        instance_data = {
+            "id": instance_id,
+            "name": name,
+            "url": url,
+            "running": True,
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "logs": [f"实例启动成功", f"开始监控: {url}"],
+        }
+        instances[instance_id] = instance_data
+
+        with _runtime_lock:
+            _runtime[instance_id] = {
+                "thread": thread,
+                "stop_event": stop_event,
+                "restart_count": 0,
+                "name": name,
+                "url": url,
+                "driver_pid": None,
+            }
+
+        save_instances(instances)
+        log_operation("创建实例", f"实例名: {name}, URL: {url}")
+        return instance_id, instance_data
+    except Exception as e:
+        print(f"启动失败: {e}")
+        return None, str(e)
+
+
 @app.route("/create", methods=["GET", "POST"])
 def create_instance():
     if request.method == "POST":
@@ -273,44 +320,42 @@ def create_instance():
         if not name or not url:
             return render_template("create.html", error="名称和URL不能为空")
 
-        instances = load_instances()
-        instance_id = str(int(time.time()))
-
-        try:
-            stop_event = threading.Event()
-            thread = threading.Thread(
-                target=_run_instance,
-                args=(url, name, stop_event, instance_id),
-                daemon=True,
-            )
-            thread.start()
-
-            instances[instance_id] = {
-                "id": instance_id,
-                "name": name,
-                "url": url,
-                "running": True,
-                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "logs": [f"实例启动成功", f"开始监控: {url}"],
-            }
-            with _runtime_lock:
-                _runtime[instance_id] = {
-                    "thread": thread,
-                    "stop_event": stop_event,
-                    "restart_count": 0,
-                    "name": name,
-                    "url": url,
-                    "driver_pid": None,
-                }
-
-            save_instances(instances)
-            log_operation("创建实例", f"实例名: {name}, URL: {url}")
+        instance_id, result = _start_instance(name, url)
+        if instance_id:
             return redirect(url_for("index"))
-        except Exception as e:
-            print(f"启动失败: {e}")
-            return render_template("create.html", error=f"启动失败: {str(e)}")
+        else:
+            return render_template("create.html", error=f"启动失败: {result}")
 
     return render_template("create.html")
+
+
+@app.route("/api/create", methods=["POST"])
+def api_create_instance():
+    """API: 通过 JSON 请求体创建自动夜答实例。
+
+    Request body (JSON):
+        {
+            "instance_name": "my-instance",
+            "easycheck_url": "https://example.com/check"
+        }
+    """
+    if not request.is_json:
+        return jsonify({"code": 1, "success": False, "msg": "请求体必须是 JSON"}), 400
+
+    data = request.get_json()
+    name = (data.get("instance_name") or "").strip()
+    url = (data.get("easycheck_url") or "").strip()
+
+    if not name:
+        return jsonify({"code": 1, "success": False, "msg": "instance_name 不能为空"}), 400
+    if not url:
+        return jsonify({"code": 1, "success": False, "msg": "easycheck_url 不能为空"}), 400
+
+    instance_id, result = _start_instance(name, url)
+    if instance_id:
+        return jsonify({"code": 0, "success": True, "msg": "请求成功", "instance_id": instance_id}), 201
+    else:
+        return jsonify({"code": 2, "success": False, "msg": f"启动失败: {result}"}), 500
 
 
 @app.route("/instance/<instance_id>")
@@ -363,7 +408,7 @@ def api_status():
             instance["running"] = False
 
     save_instances(instances)
-    return {"status": "ok", "instances": instances}
+    return {"code": 0, "msg": "请求成功", "status": "ok", "instances": instances}
 
 
 if __name__ == "__main__":
