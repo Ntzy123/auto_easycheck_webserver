@@ -83,19 +83,37 @@ curl -X POST http://localhost:5000/api/create \
 
 ---
 
-### 查询所有实例
+### 查询实例状态
 
 `GET /api/status`
 
-返回所有已创建的自动夜答实例及其运行状态。
+查询所有实例。
 
-**示例：**
+`POST /api/status`
+
+按 `id` 查询单个实例，不传 `id` 则返回全部实例。
+
+**请求体（POST，可选）：** `Content-Type: application/json`
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `id` | string | 否 | 实例 ID，不传则返回全部实例 |
+
+**GET 示例：**
 
 ```bash
 curl http://localhost:5000/api/status
 ```
 
-**响应 (200):**
+**POST 示例（查单个）：**
+
+```bash
+curl -X POST http://localhost:5000/api/status \
+  -H "Content-Type: application/json" \
+  -d '{"id": "1712345678"}'
+```
+
+**GET / POST 不传 id 响应 (200):**
 
 ```json
 {
@@ -111,6 +129,34 @@ curl http://localhost:5000/api/status
       "created_at": "2026-07-07 04:00:00"
     }
   }
+}
+```
+
+**POST 传 id 响应（实例存在，200）：**
+
+```json
+{
+  "code": 0,
+  "msg": "请求成功",
+  "status": "ok",
+  "instance": {
+    "id": "1712345678",
+    "name": "monitor-douyin",
+    "url": "https://live.douyin.com/123456",
+    "running": true,
+    "created_at": "2026-07-07 04:00:00"
+  }
+}
+```
+
+**POST 传 id 响应（实例不存在，200）：**
+
+```json
+{
+  "code": 1,
+  "msg": "实例不存在",
+  "status": "error",
+  "instance": null
 }
 ```
 

@@ -395,9 +395,18 @@ def stop_instance(instance_id):
     return redirect(url_for("index"))
 
 
-@app.route("/api/status")
+@app.route("/api/status", methods=["GET", "POST"])
 def api_status():
     instances = load_instances()
+
+    # POST 请求支持通过 id 筛选
+    target_id = None
+    if request.method == "POST":
+        if request.is_json:
+            data = request.get_json()
+            target_id = (data.get("id") or "").strip()
+        else:
+            return jsonify({"code": 1, "msg": "请求体必须是 JSON", "status": "error"}), 400
 
     for instance_id, instance in instances.items():
         with _runtime_lock:
@@ -408,6 +417,13 @@ def api_status():
             instance["running"] = False
 
     save_instances(instances)
+
+    if target_id:
+        if target_id in instances:
+            return {"code": 0, "msg": "请求成功", "status": "ok", "instance": instances[target_id]}
+        else:
+            return {"code": 1, "msg": "实例不存在", "status": "error", "instance": None}
+
     return {"code": 0, "msg": "请求成功", "status": "ok", "instances": instances}
 
 
