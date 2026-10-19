@@ -2,7 +2,12 @@
 
 ## 概述
 
-`get_easycheck_url()` 是 `get-easycheck-url` 库提供的一个核心函数，用于通过手机号和密码自动完成 OAuth 登录流程，最终获取 easycheck 授权的可访问 URL。
+`get-easycheck-url` 库提供两个函数，均通过手机号和密码自动完成 OAuth 登录流程：
+
+| 函数 | 返回 |
+|------|------|
+| `get_easycheck_url()` | 完整可访问的 easycheck URL |
+| `get_access_token()` | 仅 `accessToken` 的 JWT 字符串 |
 
 ## 安装
 
@@ -19,12 +24,14 @@ pip install -e .
 ## 函数签名
 
 ```python
-def get_easycheck_url(
-    mobile: str,
-    password: str,
-) -> str:
+def get_easycheck_url(mobile: str, password: str) -> str:
+    ...
+
+def get_access_token(mobile: str, password: str) -> str:
     ...
 ```
+
+两者参数、异常完全相同，仅返回值不同。
 
 ### 参数
 
@@ -35,7 +42,10 @@ def get_easycheck_url(
 
 ### 返回值
 
-返回 `str`，格式为 `https://rm.vankeservice.com/easycheck/#/nightAnswer?accessToken=<JWT>`。
+| 函数 | 返回 |
+|------|------|
+| `get_easycheck_url()` | `https://rm.vankeservice.com/easycheck/#/nightAnswer?accessToken=<JWT>` |
+| `get_access_token()` | 原始 JWT 字符串（不含 URL 前缀与参数名） |
 
 ### 异常
 
@@ -46,13 +56,23 @@ def get_easycheck_url(
 
 ## 使用示例
 
-### 基本用法
+### 获取完整 URL
 
 ```python
 from get_easycheck_url import get_easycheck_url
 
 url = get_easycheck_url("138xxxxxxxx", "your_password")
 print(url)
+```
+
+### 仅获取 accessToken
+
+```python
+from get_easycheck_url import get_access_token
+
+token = get_access_token("138xxxxxxxx", "your_password")
+print(token)
+# eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
 ```
 
 ### 异常处理
@@ -75,6 +95,10 @@ except RuntimeError as e:
 ```
 https://rm.vankeservice.com/easycheck/#/nightAnswer?accessToken=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
 ```
+
+`get_access_token()` 返回的就是上面 URL 中 `accessToken` 的值（不重新发起额外请求，只在内部流程结束后提取）。
+
+> 注意：`accessToken` 位于 URL 的 fragment（`#` 之后），因此 `get_easycheck_url()` 的返回值用 `urlparse().query` 取不到，需要用 `get_access_token()` 或自行解析 fragment。
 
 ## 依赖
 

@@ -284,6 +284,52 @@ def test_api_get_easycheck_url_exception(_mock_get_easycheck_url_module, client)
     assert "网络错误" in data["msg"]
 
 
+# ---- Flask Route: POST /api/get-access-token ----
+
+@pytest.fixture
+def _mock_get_access_token_module(monkeypatch):
+    """在 sys.modules 注入 mock 的 get_easycheck_url 模块（含 get_access_token）"""
+    mock_module = MagicMock()
+    mock_module.get_access_token = MagicMock()
+    monkeypatch.setitem(sys.modules, "get_easycheck_url", mock_module)
+    return mock_module.get_access_token
+
+
+def test_api_get_access_token_valid(_mock_get_access_token_module, client):
+    """POST /api/get-access-token with valid credentials returns 200 + access_token"""
+    _mock_get_access_token_module.return_value = "eyJhbGciOiJIUzI1NiJ9.payload.sig"
+    resp = client.post("/api/get-access-token",
+                       json={"mobile": "13800138000", "password": "secret"})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["code"] == 0
+    assert data["success"] is True
+    assert data["access_token"] == "eyJhbGciOiJIUzI1NiJ9.payload.sig"
+
+
+def test_api_get_access_token_missing_credentials(client):
+    """POST /api/get-access-token without mobile/password returns 400"""
+    assert client.post("/api/get-access-token", json={"password": "secret"}).status_code == 400
+    assert client.post("/api/get-access-token", json={"mobile": "13800138000"}).status_code == 400
+
+
+def test_api_get_access_token_non_json(client):
+    """POST /api/get-access-token with non-JSON body returns 400"""
+    resp = client.post("/api/get-access-token", data="not json", content_type="text/plain")
+    assert resp.status_code == 400
+
+
+def test_api_get_access_token_exception(_mock_get_access_token_module, client):
+    """POST /api/get-access-token when get_access_token raises returns 500"""
+    _mock_get_access_token_module.side_effect = Exception("登录失败")
+    resp = client.post("/api/get-access-token",
+                       json={"mobile": "13800138000", "password": "secret"})
+    assert resp.status_code == 500
+    data = resp.get_json()
+    assert data["code"] == 2
+    assert "登录失败" in data["msg"]
+
+
 @pytest.fixture
 def client():
     from auto_easycheck_webserver.app import app
