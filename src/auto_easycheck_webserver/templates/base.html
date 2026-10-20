@@ -140,14 +140,20 @@
         .btn {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            border: none;
-            padding: 16px 32px;
-            border-radius: 25px;
+            border: 1px solid transparent;
+            min-width: 168px;
+            height: 52px;
+            padding: 0 28px;
+            border-radius: 26px;
+            font-family: inherit;
             font-size: 16px;
             font-weight: 500;
+            line-height: 1;
             cursor: pointer;
             text-decoration: none;
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             text-align: center;
             transition: all 0.3s ease;
             box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
@@ -236,6 +242,183 @@
             margin-bottom: 10px;
             font-weight: 300;
         }
+
+        /* ---- 右上角用户区 ---- */
+        .user-area {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .user-chip {
+            color: white;
+            background: rgba(255,255,255,0.18);
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-size: 13px;
+            letter-spacing: .3px;
+        }
+
+        .btn-manual {
+            background: rgba(255,255,255,0.10);
+            border: 1px solid rgba(255,255,255,0.5);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            backdrop-filter: blur(6px);
+        }
+
+        .btn-manual:hover {
+            background: rgba(255,255,255,0.18);
+            border-color: rgba(255,255,255,0.75);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+        }
+
+        /* ---- 弹窗 ---- */
+        .modal-mask {
+            position: fixed;
+            inset: 0;
+            background: rgba(18, 20, 40, 0.45);
+            backdrop-filter: blur(4px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            z-index: 1200;
+        }
+
+        .modal-mask.show {
+            display: flex;
+        }
+
+        .modal {
+            position: relative;
+            width: 100%;
+            max-width: 360px;
+            background: white;
+            border-radius: 18px;
+            padding: 26px 24px 22px;
+            box-shadow: 0 24px 60px rgba(0,0,0,0.25);
+            animation: modalIn .18s ease-out;
+        }
+
+        @keyframes modalIn {
+            from { opacity: 0; transform: translateY(8px) scale(.98); }
+            to { opacity: 1; transform: none; }
+        }
+
+        .modal h3 {
+            font-size: 18px;
+            color: #222;
+            margin-bottom: 6px;
+        }
+
+        .modal-sub {
+            font-size: 13px;
+            color: #777;
+            line-height: 1.5;
+            margin-bottom: 18px;
+        }
+
+        .modal label {
+            display: block;
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 6px;
+        }
+
+        .modal input {
+            width: 100%;
+            padding: 11px 14px;
+            margin-bottom: 14px;
+            border: 1.5px solid #e3e3e8;
+            border-radius: 10px;
+            font-size: 15px;
+            color: #333;
+            background: #fafafc;
+            transition: border-color .2s, box-shadow .2s, background .2s;
+        }
+
+        .modal input:focus {
+            outline: none;
+            background: white;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102,126,234,0.15);
+        }
+
+        .modal-hint {
+            font-size: 12px;
+            color: #999;
+            margin: -6px 0 14px;
+        }
+
+        .modal-warn {
+            display: none;
+            background: #fff8ed;
+            border: 1px solid #fed7aa;
+            color: #b45309;
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 12.5px;
+            line-height: 1.5;
+            margin-bottom: 14px;
+        }
+
+        .modal-warn.show {
+            display: block;
+        }
+
+        .modal-error {
+            color: #dc3545;
+            font-size: 12.5px;
+            line-height: 1.5;
+            min-height: 16px;
+            margin-bottom: 10px;
+        }
+
+        .modal-btn {
+            width: 100%;
+            border: none;
+            border-radius: 12px;
+            padding: 12px;
+            font-size: 15px;
+            color: white;
+            cursor: pointer;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            box-shadow: 0 4px 15px rgba(102,126,234,0.3);
+            transition: opacity .2s;
+        }
+
+        .modal-btn:disabled {
+            opacity: .6;
+            cursor: default;
+        }
+
+        .modal-x {
+            position: absolute;
+            top: 10px;
+            right: 14px;
+            border: none;
+            background: none;
+            font-size: 22px;
+            line-height: 1;
+            color: #bbb;
+            cursor: pointer;
+        }
+
+        .modal-link {
+            display: none;
+            margin: 14px auto 0;
+            border: none;
+            background: none;
+            color: #9aa0b4;
+            font-size: 12px;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+
+        .modal-link.show {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -246,20 +429,236 @@
                 <a href="https://rm.vankeservice.com/api/easycheck/web/index?wkwebview=true&rurl=/nightAnswer"
                    target="_blank" class="top-btn">轻松夜答URL</a>
                 <button class="top-btn" onclick="toggleHelp()">帮助</button>
+                <span class="user-area" id="userArea"></span>
             </div>
         </div>
         <div class="help-content" id="helpContent">
             <h3 style="text-align: center; margin-bottom: 15px; color: #333;">使用指南</h3>
-            <p style="margin-bottom: 12px;"><strong>第一步：</strong>点击右上角↗的<strong style="color: #667eea;">[轻松夜答URL]</strong>按钮</p>
-            <p style="margin-bottom: 12px;"><strong>第二步：</strong>登录成功进入夜答网页后，复制浏览器地址栏中的完整网址URL</p>
-            <p style="margin-bottom: 12px;"><strong>第三步：</strong>返回到此界面，点击页面底部的<strong style="color: #667eea;">[创建新实例]</strong>按钮</p>
-            <p style="margin-bottom: 0;"><strong>第四步：</strong>输入实例名称（备注）和刚刚复制的URL，点击确定即可完成创建</p>
+            <p style="margin-bottom: 12px;"><strong>第一步：</strong>点击右上角<strong style="color: #667eea;">[登录]</strong>，用轻松夜答账号登录一次（自动保存登录状态）</p>
+            <p style="margin-bottom: 12px;"><strong>第二步：</strong>点击<strong style="color: #667eea;">[创建新实例]</strong>，系统自动获取网址，实例名取手机号后四位</p>
+            <p style="margin-bottom: 12px;"><strong>第三步：</strong>需要自定义名称/网址时，使用旁边的<strong style="color: #667eea;">[手动创建]</strong></p>
+            <p style="margin-bottom: 0;"><strong>提示：</strong>创建弹窗右下角可切换「使用其他账号创建」，帮他人创建不影响自己的登录状态</p>
+        </div>
+
+        <div class="modal-mask" id="authMask" onclick="if (event.target === this) closeAuth()">
+            <div class="modal">
+                <button type="button" class="modal-x" onclick="closeAuth()">&times;</button>
+                <h3 id="authTitle">登录</h3>
+                <p class="modal-sub" id="authSub"></p>
+                <form id="authForm" onsubmit="submitAuth(event)">
+                    <div id="authFields">
+                        <label for="authMobile">手机号</label>
+                        <input type="tel" id="authMobile" autocomplete="username" placeholder="请输入手机号"
+                               oninput="updateNamePreview()">
+                        <label for="authPassword">密码</label>
+                        <input type="password" id="authPassword" autocomplete="current-password" placeholder="请输入密码">
+                        <p class="modal-hint" id="authNameHint"></p>
+                    </div>
+                    <div class="modal-warn" id="authWarn"></div>
+                    <p class="modal-error" id="authError"></p>
+                    <button type="submit" class="modal-btn" id="authSubmit">登录</button>
+                </form>
+                <button type="button" class="modal-link" id="authSwitch" onclick="setAuthMode('other-create')">
+                    使用其他账号创建
+                </button>
+            </div>
         </div>
         {% block content %}{% endblock %}
     </div>
 
     <script>
+        // ---- 登录态 ----
+        let ME = null;
+        let authMode = 'login';   // login | create | guest-create | other-create
+        let needConfirm = false;
+
+        async function refreshMe() {
+            try {
+                const res = await fetch('/api/me', { cache: 'no-store' });
+                ME = await res.json();
+            } catch (e) {
+                ME = { logged_in: false };
+            }
+            renderUserArea();
+            return ME;
+        }
+
+        function renderUserArea() {
+            const el = document.getElementById('userArea');
+            if (!el) return;
+            if (ME && ME.logged_in) {
+                el.innerHTML =
+                    '<span class="user-chip">' + escapeHtml(ME.mobile_masked) + '</span>' +
+                    '<button class="top-btn" onclick="logout()">退出</button>';
+            } else {
+                el.innerHTML = '<button class="top-btn" onclick="openAuth(\'login\')">登录</button>';
+            }
+        }
+
+        function escapeHtml(value) {
+            return String(value == null ? '' : value).replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[c]);
+        }
+
+        async function logout() {
+            await fetch('/api/logout', { method: 'POST' });
+            await refreshMe();
+            window.location.reload();
+        }
+
+        // ---- 弹窗 ----
+        function showAuth() {
+            document.getElementById('authMask').classList.add('show');
+        }
+
+        function closeAuth() {
+            document.getElementById('authMask').classList.remove('show');
+            document.getElementById('authError').textContent = '';
+        }
+
+        async function openAuth(mode) {
+            await refreshMe();
+            setAuthMode(mode);
+            showAuth();
+            if (mode !== 'create') document.getElementById('authMobile').focus();
+        }
+
+        function setAuthMode(mode) {
+            authMode = mode;
+            needConfirm = false;
+            const me = ME || {};
+            const fields = document.getElementById('authFields');
+            const link = document.getElementById('authSwitch');
+            const warn = document.getElementById('authWarn');
+
+            document.getElementById('authError').textContent = '';
+            document.getElementById('authPassword').value = '';
+            warn.classList.remove('show');
+            link.classList.remove('show');
+            fields.style.display = 'none';
+            document.getElementById('authNameHint').textContent = '';
+
+            if (mode === 'other-create') {
+                document.getElementById('authMobile').value = '';
+            }
+
+            if (mode === 'login') {
+                document.getElementById('authTitle').textContent = '登录';
+                document.getElementById('authSub').textContent = '使用轻松夜答账号登录，登录状态会自动保存。';
+                fields.style.display = '';
+                document.getElementById('authSubmit').textContent = '登录';
+            } else if (mode === 'create') {
+                document.getElementById('authTitle').textContent = '创建实例';
+                document.getElementById('authSub').textContent =
+                    '使用 ' + (me.mobile_masked || '') + ' 自动获取网址，实例名 ' + (me.display_name || '') + '。';
+                if (me.owned_instances && me.owned_instances.length) {
+                    warn.textContent = '该账号已有实例（' + me.owned_instances.map(i => i.name).join('、') +
+                        '），继续创建会先停止旧实例。';
+                    warn.classList.add('show');
+                }
+                link.classList.add('show');
+                document.getElementById('authSubmit').textContent = '确认创建';
+            } else if (mode === 'guest-create') {
+                document.getElementById('authTitle').textContent = '登录并创建实例';
+                document.getElementById('authSub').textContent =
+                    '登录后自动获取网址，实例名取手机号后四位。';
+                fields.style.display = '';
+                document.getElementById('authSubmit').textContent = '登录并创建';
+            } else {
+                document.getElementById('authTitle').textContent = '使用其他账号创建';
+                document.getElementById('authSub').textContent = '帮别人创建实例，不会影响当前登录状态。';
+                fields.style.display = '';
+                document.getElementById('authSubmit').textContent = '创建实例';
+            }
+        }
+
+        function updateNamePreview() {
+            const mobile = (document.getElementById('authMobile').value || '').trim();
+            document.getElementById('authNameHint').textContent =
+                mobile.length >= 4 ? '实例名：' + mobile.slice(-4) : '';
+        }
+
+        async function openCreateModal() {
+            const me = await refreshMe();
+            setAuthMode(me.logged_in ? 'create' : 'guest-create');
+            showAuth();
+        }
+
+        async function submitAuth(event) {
+            event.preventDefault();
+            const btn = document.getElementById('authSubmit');
+            const errEl = document.getElementById('authError');
+            const mobile = (document.getElementById('authMobile').value || '').trim();
+            const password = document.getElementById('authPassword').value;
+            const oldText = btn.textContent;
+
+            errEl.textContent = '';
+            let url, body;
+            if (authMode === 'login') {
+                if (!mobile || !password) { errEl.textContent = '请输入手机号和密码'; return; }
+                url = '/api/login';
+                body = { mobile, password };
+            } else if (authMode === 'create') {
+                url = '/api/quick-create';
+                body = { confirm_replace: true };
+            } else {
+                if (!mobile || !password) { errEl.textContent = '请输入手机号和密码'; return; }
+                url = '/api/quick-create';
+                body = {
+                    mobile, password,
+                    ephemeral: authMode === 'other-create',
+                    confirm_replace: needConfirm
+                };
+            }
+
+            btn.disabled = true;
+            btn.textContent = authMode === 'login' ? '登录中…' : '正在处理，请稍候…';
+
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+
+                if (data.need_confirm) {
+                    needConfirm = true;
+                    const warn = document.getElementById('authWarn');
+                    warn.textContent = data.msg;
+                    warn.classList.add('show');
+                    btn.disabled = false;
+                    btn.textContent = '停止旧实例并创建';
+                    return;
+                }
+
+                if (!data.success) {
+                    errEl.textContent = data.msg || '操作失败';
+                    btn.disabled = false;
+                    btn.textContent = oldText;
+                    return;
+                }
+
+                if (authMode === 'login') {
+                    await refreshMe();
+                    closeAuth();
+                    btn.disabled = false;
+                    btn.textContent = oldText;
+                } else {
+                    btn.textContent = '创建成功，正在刷新…';
+                    window.location.href = '/';
+                }
+            } catch (e) {
+                errEl.textContent = '网络错误：' + e.message;
+                btn.disabled = false;
+                btn.textContent = oldText;
+            }
+        }
+
+        // ---- 其他 ----
         setInterval(() => {
+            if (document.querySelector('.modal-mask.show')) return;
             if (window.location.pathname === '/') {
                 fetch('/api/status')
                     .then(response => response.json())
@@ -277,6 +676,8 @@
             const helpContent = document.getElementById('helpContent');
             helpContent.classList.toggle('show');
         }
+
+        refreshMe();
     </script>
 </body>
 </html>

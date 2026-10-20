@@ -1,17 +1,20 @@
-from flask import Flask, jsonify, render_template, request, redirect, url_for
+from flask import Flask, jsonify, render_template, request, redirect, url_for, session
 from waitress import serve
 import os
 import json
 import time
 import threading
 import signal
-from datetime import datetime
+import secrets
+from datetime import datetime, timedelta
 import atexit
 
 app = Flask(__name__)
 
 # 存储运行实例的数据
 instances_file = "cache/instances.json"
+# 账号密码缓存（手机号 -> 密码），用于登录后自动获取 easycheck URL
+credentials_file = "cache/credentials.json"
 # 日志目录路径（相对于运行目录）
 logs_dir = "log"
 # 操作日志文件路径
@@ -71,6 +74,74 @@ def reset_instances_file():
 reset_instances_file()
 
 
+def _load_or_create_secret_key():
+    """持久化 session 密钥：服务重启后登录态仍有效。"""
+    cache_dir = os.path.dirname(instances_file) or "cache"
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
+    path = os.path.join(cache_dir, "secret_key.txt")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            key = f.read().strip()
+        if key:
+            return key
+    except OSError:
+        pass
+    key = secrets.token_hex(32)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(key)
+    return key
+
+
+app.secret_key = _load_or_create_secret_key()
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
+_credentials_lock = threading.Lock()
+
+
+def load_credentials():
+    """读取账号密码缓存，失败返回空 dict。"""
+    try:
+        with open(credentials_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_credentials(creds):
+    cache_dir = os.path.dirname(credentials_file)
+    if cache_dir and not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
+    with open(credentials_file, "w", encoding="utf-8") as f:
+        json.dump(creds, f, ensure_ascii=False, indent=2)
+
+
+def remember_credentials(mobile, password):
+    with _credentials_lock:
+        creds = load_credentials()
+        creds[mobile] = password
+        save_credentials(creds)
+
+
+def mask_mobile(mobile):
+    return f"{mobile[:3]}****{mobile[-4:]}" if len(mobile) >= 7 else mobile
+
+
+def verify_account(mobile, password):
+    """用 get_easycheck_url 验证账号，成功返回 easycheck URL，失败抛异常。"""
+    from get_easycheck_url import get_easycheck_url
+    return get_easycheck_url(mobile, password)
+
+
+def establish_session(mobile, password):
+    """记住账号密码并建立长期登录态。"""
+    remember_credentials(mobile, password)
+    session.permanent = True
+    session["mobile"] = mobile
+
+
 def load_instances():
     if os.path.exists(instances_file):
         with open(instances_file, "r", encoding="utf-8") as f:
@@ -96,18 +167,18 @@ def get_instance_logs(name, lines=10):
     return ["暂无日志"]
 
 
-def _kill_browser_processes(instance_id=None):
+def _kill_browser_processes(instance_id=None, driver_pid=None):
     """跨平台强制清理浏览器和 driver 进程。
 
     Args:
         instance_id: 如果提供，优先精准杀该实例对应的 driver 进程树；
                      否则只杀 msedgedriver.exe（不碰用户自开的 msedge）。
+        driver_pid: 已知的 driver 进程 PID（实例已从 _runtime 移除时直接传）。
     """
     import subprocess
     import platform
 
-    driver_pid = None
-    if instance_id:
+    if driver_pid is None and instance_id:
         with _runtime_lock:
             rt = _runtime.get(instance_id)
             if rt:
@@ -264,15 +335,58 @@ def index():
     return render_template("index.html", instances=instances)
 
 
-def _start_instance(name, url):
+def _unique_instance_name(base):
+    """同名实例不共用日志文件，重名时追加序号。"""
+    names = {inst.get("name") for inst in load_instances().values()}
+    if base not in names:
+        return base
+    n = 2
+    while f"{base}-{n}" in names:
+        n += 1
+    return f"{base}-{n}"
+
+
+def _stop_instance(instance_id):
+    """停止并删除实例（含等待线程退出/强制清理），返回是否找到该实例。"""
+    instances = load_instances()
+    instance = instances.pop(instance_id, None)
+
+    with _runtime_lock:
+        rt = _runtime.pop(instance_id, None)
+    if rt:
+        driver_pid = rt.get("driver_pid")
+        rt["stop_event"].set()
+        # 等待线程自然退出（最多等 70 秒，覆盖 auto_click 中 60s wait）
+        rt["thread"].join(timeout=70)
+        if rt["thread"].is_alive():
+            # 线程卡死 → 强制杀该实例的浏览器进程（已 pop 出 _runtime，需显式传 PID）
+            _kill_browser_processes(driver_pid=driver_pid)
+
+    if not instance:
+        return False
+
+    save_instances(instances)
+    log_operation("停止实例", f"实例名: {instance.get('name')}, URL: {instance.get('url')}")
+    return True
+
+
+def _start_instance(name, url, mobile=None):
     """启动一个自动夜答实例并注册到 _runtime 和持久化文件。
+
+    Args:
+        mobile: 实例归属的手机号（快捷创建时记录，用于同账号替换）
 
     Returns:
         (instance_id, instance_dict) 成功
         (None, error_message) 失败
     """
     instances = load_instances()
-    instance_id = str(int(time.time()))
+    base_id = str(int(time.time()))
+    instance_id = base_id
+    n = 0
+    while instance_id in instances or instance_id in _runtime:
+        n += 1
+        instance_id = f"{base_id}{n}"
 
     try:
         stop_event = threading.Event()
@@ -287,6 +401,7 @@ def _start_instance(name, url):
             "id": instance_id,
             "name": name,
             "url": url,
+            "mobile": mobile,
             "running": True,
             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "logs": [f"实例启动成功", f"开始监控: {url}"],
@@ -304,7 +419,7 @@ def _start_instance(name, url):
             }
 
         save_instances(instances)
-        log_operation("创建实例", f"实例名: {name}, URL: {url}")
+        log_operation("创建实例", f"实例名: {name}, 账号: {mobile or '手动'}, URL: {url}")
         return instance_id, instance_data
     except Exception as e:
         print(f"启动失败: {e}")
@@ -313,20 +428,32 @@ def _start_instance(name, url):
 
 @app.route("/create", methods=["GET", "POST"])
 def create_instance():
+    mobile = (session.get("mobile") or "").strip()
+    password = load_credentials().get(mobile) if mobile else None
+
     if request.method == "POST":
         name = request.form.get("name", "").strip()
         url = request.form.get("url", "").strip()
 
         if not name or not url:
-            return render_template("create.html", error="名称和URL不能为空")
+            return render_template("create.html", error="名称和URL不能为空",
+                                   prefill={"name": name, "url": url, "notice": ""})
 
-        instance_id, result = _start_instance(name, url)
+        instance_id, result = _start_instance(name, url, mobile=mobile or None)
         if instance_id:
             return redirect(url_for("index"))
         else:
-            return render_template("create.html", error=f"启动失败: {result}")
+            return render_template("create.html", error=f"启动失败: {result}",
+                                   prefill={"name": name, "url": url, "notice": ""})
 
-    return render_template("create.html")
+    # GET：已登录则自动取 URL 预填，失败不影响手动填写
+    prefill = {"name": mobile[-4:] if mobile else "", "url": "", "notice": ""}
+    if mobile and password:
+        try:
+            prefill["url"] = verify_account(mobile, password)
+        except Exception as e:
+            prefill["notice"] = f"自动获取 URL 失败（{e}），请手动填写"
+    return render_template("create.html", prefill=prefill)
 
 
 @app.route("/api/create", methods=["POST"])
@@ -356,6 +483,135 @@ def api_create_instance():
         return jsonify({"code": 0, "success": True, "msg": "请求成功", "instance_id": instance_id}), 201
     else:
         return jsonify({"code": 2, "success": False, "msg": f"启动失败: {result}"}), 500
+
+
+@app.route("/api/me")
+def api_me():
+    """返回当前登录态与该账号名下的实例（供前端弹窗判断是否需要替换）。"""
+    mobile = (session.get("mobile") or "").strip()
+    owned = []
+    if mobile:
+        for instance_id, instance in load_instances().items():
+            if instance.get("mobile") != mobile:
+                continue
+            with _runtime_lock:
+                rt = _runtime.get(instance_id)
+            owned.append({
+                "id": instance_id,
+                "name": instance.get("name", ""),
+                "running": bool(rt and rt["thread"].is_alive()),
+            })
+    return jsonify({
+        "code": 0,
+        "logged_in": bool(mobile),
+        "mobile": mobile,
+        "mobile_masked": mask_mobile(mobile) if mobile else "",
+        "display_name": mobile[-4:] if mobile else "",
+        "owned_instances": owned,
+    })
+
+
+@app.route("/api/login", methods=["POST"])
+def api_login():
+    """用 get_easycheck_url 校验账号密码，通过即建立长期登录态。"""
+    creds, error = _parse_credentials()
+    if error:
+        return error
+    mobile, password = creds
+
+    try:
+        verify_account(mobile, password)
+    except Exception as e:
+        log_operation("登录失败", f"手机号: {mobile}, 错误: {e}")
+        return jsonify({"code": 2, "success": False, "msg": f"账号或密码不正确: {e}"}), 400
+
+    establish_session(mobile, password)
+    log_operation("用户登录", f"手机号: {mobile}")
+    return jsonify({
+        "code": 0,
+        "success": True,
+        "msg": "登录成功",
+        "mobile": mobile,
+        "mobile_masked": mask_mobile(mobile),
+        "display_name": mobile[-4:],
+    })
+
+
+@app.route("/api/logout", methods=["POST"])
+def api_logout():
+    mobile = session.get("mobile") or ""
+    session.clear()
+    log_operation("用户退出", f"手机号: {mobile or '未登录'}")
+    return jsonify({"code": 0, "success": True, "msg": "已退出"})
+
+
+@app.route("/api/quick-create", methods=["POST"])
+def api_quick_create():
+    """快捷创建：自动获取 URL 并以手机号后四位命名实例。
+
+    Request body (JSON, 字段均可选):
+        {
+            "mobile": "138xxxxxxxx",   # 不传则用当前登录账号
+            "password": "xxx",         # 不传则用 cache/credentials.json 中记住的密码
+            "ephemeral": false,        # true = 帮别人创建，不改变当前登录态
+            "confirm_replace": false   # true = 允许停止同账号的旧实例
+        }
+    """
+    data = request.get_json(silent=True) or {}
+    mobile = (data.get("mobile") or "").strip()
+    password = (data.get("password") or "").strip()
+    ephemeral = bool(data.get("ephemeral"))
+    confirm_replace = bool(data.get("confirm_replace"))
+
+    if not mobile:
+        mobile = (session.get("mobile") or "").strip()
+    if mobile and not password:
+        password = load_credentials().get(mobile, "")
+
+    if not mobile or not password:
+        return jsonify({"code": 401, "success": False, "msg": "登录已失效，请重新登录"}), 401
+
+    try:
+        url = verify_account(mobile, password)
+    except Exception as e:
+        log_operation("快捷创建失败", f"手机号: {mobile}, 错误: {e}")
+        return jsonify({"code": 2, "success": False, "msg": f"账号或密码不正确: {e}"}), 400
+
+    # 临时账号只用于本次创建，不改登录态、不落盘
+    if not ephemeral:
+        establish_session(mobile, password)
+
+    existing = [
+        {"id": instance_id, "name": instance.get("name", "")}
+        for instance_id, instance in load_instances().items()
+        if instance.get("mobile") == mobile
+    ]
+    if existing and not confirm_replace:
+        return jsonify({
+            "code": 3,
+            "success": False,
+            "need_confirm": True,
+            "msg": "该账号已有实例，继续将停止旧实例后重新创建",
+            "existing": existing,
+        })
+
+    for item in existing:
+        _stop_instance(item["id"])
+
+    name = _unique_instance_name(mobile[-4:])
+    instance_id, result = _start_instance(name, url, mobile=mobile)
+    if not instance_id:
+        return jsonify({"code": 2, "success": False, "msg": f"启动失败: {result}"}), 500
+
+    log_operation("快捷创建实例", f"实例名: {name}, 手机号: {mobile}, 替换旧实例: {len(existing)}")
+    return jsonify({
+        "code": 0,
+        "success": True,
+        "msg": "创建成功",
+        "instance_id": instance_id,
+        "name": name,
+        "replaced": len(existing),
+    }), 201
 
 
 def _parse_credentials():
@@ -455,25 +711,7 @@ def instance_detail(instance_id):
 
 @app.route("/stop/<instance_id>", methods=["POST"])
 def stop_instance(instance_id):
-    instances = load_instances()
-    instance = instances.get(instance_id)
-
-    if instance:
-        with _runtime_lock:
-            rt = _runtime.pop(instance_id, None)
-        if rt:
-            rt["stop_event"].set()
-            # 等待线程自然退出（最多等 70 秒，覆盖 auto_click 中 60s wait）
-            rt["thread"].join(timeout=70)
-            if rt["thread"].is_alive():
-                # 线程卡死 → 强制杀浏览器进程
-                _kill_browser_processes(instance_id)
-
-        if instance_id in instances:
-            del instances[instance_id]
-            save_instances(instances)
-            log_operation("停止实例", f"实例名: {instance['name']}, URL: {instance['url']}")
-
+    _stop_instance(instance_id)
     return redirect(url_for("index"))
 
 

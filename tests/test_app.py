@@ -11,7 +11,7 @@ from unittest.mock import patch, MagicMock
 def test_app_import():
     from auto_easycheck_webserver.app import app
     assert app is not None
-    assert app.secret_key is None
+    assert app.secret_key  # 持久化 secret key，用于长期登录态
     assert app.debug is False
 
 
@@ -43,6 +43,8 @@ def _isolate_files(monkeypatch, tmp_path):
     log_dir.mkdir()
     monkeypatch.setattr(app_mod, "instances_file",
                         str(cache_dir / "instances.json"))
+    monkeypatch.setattr(app_mod, "credentials_file",
+                        str(cache_dir / "credentials.json"))
     monkeypatch.setattr(app_mod, "logs_dir", str(log_dir))
     monkeypatch.setattr(app_mod, "operation_log_file",
                         str(log_dir / "main.log"))
@@ -328,6 +330,88 @@ def test_api_get_access_token_exception(_mock_get_access_token_module, client):
     data = resp.get_json()
     assert data["code"] == 2
     assert "登录失败" in data["msg"]
+
+
+# ---- Auth: /api/me, /api/login, /api/logout ----
+
+def test_api_me_anonymous(client):
+    data = client.get("/api/me").get_json()
+    assert data["logged_in"] is False
+    assert data["owned_instances"] == []
+
+
+def test_api_login_success(_mock_get_easycheck_url_module, client):
+    _mock_get_easycheck_url_module.return_value = "https://easycheck.example.com/#/nightAnswer?accessToken=abc"
+    resp = client.post("/api/login", json={"mobile": "13800138000", "password": "pw"})
+    assert resp.status_code == 200
+    assert resp.get_json()["success"] is True
+
+    me = client.get("/api/me").get_json()
+    assert me["logged_in"] is True
+    assert me["display_name"] == "8000"
+
+
+def test_api_login_wrong_password(_mock_get_easycheck_url_module, client):
+    _mock_get_easycheck_url_module.side_effect = RuntimeError("登录失败")
+    resp = client.post("/api/login", json={"mobile": "13800138000", "password": "bad"})
+    assert resp.status_code == 400
+    assert client.get("/api/me").get_json()["logged_in"] is False
+
+
+def test_api_logout(_mock_get_easycheck_url_module, client):
+    _mock_get_easycheck_url_module.return_value = "url"
+    client.post("/api/login", json={"mobile": "13800138000", "password": "pw"})
+    assert client.get("/api/me").get_json()["logged_in"] is True
+
+    resp = client.post("/api/logout")
+    assert resp.status_code == 200
+    assert client.get("/api/me").get_json()["logged_in"] is False
+
+
+# ---- Auth: /api/quick-create ----
+
+def test_quick_create_requires_login(client):
+    resp = client.post("/api/quick-create", json={})
+    assert resp.status_code == 401
+
+
+@patch("auto_easycheck_webserver.app._start_instance")
+def test_quick_create_guest_does_not_login(mock_start, _mock_get_easycheck_url_module, client):
+    _mock_get_easycheck_url_module.return_value = "https://x/y"
+    mock_start.return_value = ("777", {"name": "8000", "url": "https://x/y"})
+
+    resp = client.post("/api/quick-create",
+                       json={"mobile": "13800138000", "password": "pw", "ephemeral": True})
+    assert resp.status_code == 201
+    data = resp.get_json()
+    assert data["success"] is True
+    assert data["name"] == "8000"
+    assert mock_start.call_args.kwargs["mobile"] == "13800138000"
+    # 游客创建不影响登录态
+    assert client.get("/api/me").get_json()["logged_in"] is False
+
+
+@patch("auto_easycheck_webserver.app._start_instance")
+def test_quick_create_logs_in(mock_start, _mock_get_easycheck_url_module, client):
+    _mock_get_easycheck_url_module.return_value = "https://x/y"
+    mock_start.return_value = ("888", {"name": "8000", "url": "https://x/y"})
+
+    resp = client.post("/api/quick-create", json={"mobile": "13800138000", "password": "pw"})
+    assert resp.status_code == 201
+    assert client.get("/api/me").get_json()["logged_in"] is True
+
+
+def test_quick_create_needs_confirm_for_same_account(_mock_get_easycheck_url_module, client):
+    from auto_easycheck_webserver.app import save_instances
+    save_instances({"1": {"id": "1", "name": "8000", "url": "u", "mobile": "13800138000"}})
+
+    _mock_get_easycheck_url_module.return_value = "https://x/y"
+    client.post("/api/login", json={"mobile": "13800138000", "password": "pw"})
+
+    resp = client.post("/api/quick-create", json={})
+    data = resp.get_json()
+    assert data["need_confirm"] is True
+    assert data["existing"][0]["name"] == "8000"
 
 
 @pytest.fixture

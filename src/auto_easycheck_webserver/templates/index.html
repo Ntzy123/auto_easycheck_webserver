@@ -28,7 +28,8 @@
     </div>
 {% endif %}
 
-<div class="center-container" style="min-height: auto; margin-top: 20px;">
-    <a href="{{ url_for('create_instance') }}" class="btn">创建新实例</a>
+<div class="center-container" style="min-height: auto; margin-top: 20px; gap: 12px;">
+    <button type="button" class="btn" onclick="openCreateModal()">创建新实例</button>
+    <a href="{{ url_for('create_instance') }}" class="btn btn-manual">手动创建</a>
 </div>
 {% endblock %}
